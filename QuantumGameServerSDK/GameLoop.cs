@@ -100,7 +100,9 @@ namespace QuantumGameServer
                 gameInstance.messages = Array.ConvertAll(messageArray, message =>
                 {
                     BaseMessage baseMessage = JsonConvert.DeserializeObject<BaseMessage>(message.ToString());
-                    return JsonConvert.DeserializeObject<M>(baseMessage.data.ToString());
+                    M genericMessage =  JsonConvert.DeserializeObject<M>(baseMessage.data.ToString());
+                    genericMessage.playerId = baseMessage.playerId;
+                    return genericMessage;
                 })!;
 
                 var newState = _tick(gameInstance, _quantumGameServer);

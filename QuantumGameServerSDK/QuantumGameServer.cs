@@ -10,27 +10,31 @@ namespace QuantumGameServer
         public readonly int tickRate;
         public readonly int redisPort;
         public readonly string redisHost;
+        public readonly JsonSerializerSettings serializationSettings;
 
-        public QuantumGameServerConfig(string redisHost = "localhost", int redisPort = 0, int tickRate = 30)
+        public QuantumGameServerConfig(string redisHost = "localhost", int redisPort = 0, int tickRate = 30, JsonSerializerSettings serializationSettings = null)
         {
             this.tickRate = tickRate;
             this.redisPort = redisPort;
             this.redisHost = redisHost;
+            this.serializationSettings = serializationSettings;
         }
     }
     
-    public class QuantumGameServer<S, M, P> where S : class where M : IBaseMessage where P : class
+    public class QuantumGameServer<S, P> where S : class where P : class
     {
         private ConnectionMultiplexer _redis;
         private IDatabase _database;
         private QuantumGameServerConfig _config;
-        private GameLoop<S, M, P> _gameLoop;
-        private Func<GameInstance<S, M, P>, QuantumGameServer<S, M, P>, S> _tick;
+        private GameLoop<S, P> _gameLoop;
+        private Func<GameInstance<S, P>, QuantumGameServer<S, P>, S> _tick;
+        private uint _currentEventId;
         
-        public QuantumGameServer(QuantumGameServerConfig config, Func<GameInstance<S, M, P>, QuantumGameServer<S, M, P>, S> tick)
+        public QuantumGameServer(QuantumGameServerConfig config, Func<GameInstance<S, P>, QuantumGameServer<S, P>, S> tick)
         {
             _config = config;
             _tick = tick;
+            _currentEventId = 0;
         }
         
         public async void Start()
@@ -44,15 +48,16 @@ namespace QuantumGameServer
             _redis = await ConnectionMultiplexer.ConnectAsync(redisURL);
             _database = _redis.GetDatabase();
             
-            var gameLoopConfig = new GameLoopConfig<S, M, P>
+            var gameLoopConfig = new GameLoopConfig<S, P>
             {
                 tickRate = _config.tickRate,
                 redisDatabase = _database,
                 tick = _tick,
-                quantumGameServer = this
+                quantumGameServer = this,
+                serializationSettings = _config.serializationSettings
             };
 
-            _gameLoop = new GameLoop<S, M, P>(gameLoopConfig);
+            _gameLoop = new GameLoop<S, P>(gameLoopConfig);
             _gameLoop.Run();
         }
 
@@ -61,11 +66,24 @@ namespace QuantumGameServer
             _gameLoop.Stop();
         }
 
-        public async void SendMessage(IFromGSBaseMessage payload)
+        public async void SendMessage(string gameInstance, string playerId, GenericMessage message)
         {
-            string key = AccessPatterns.GetPlayerMessageChannelKey(payload.playerId);
+            QuantumEvent qEvent = new QuantumEvent()
+            {
+                gameInstanceId = gameInstance,
+                playerId = playerId,
+                type = "generic-message",
+                id = _currentEventId++,
+                message = message,
+            };
+            await SendEvent(qEvent);
+        }
+        
+        private async Task SendEvent(QuantumEvent qEvent)
+        {
+            string key = AccessPatterns.GetPlayerMessageChannelKey(qEvent.playerId);
             RedisChannel channel = new RedisChannel(key, RedisChannel.PatternMode.Auto);
-            await _database.PublishAsync(channel, JsonConvert.SerializeObject(payload));
+            await _database.PublishAsync(channel, JsonConvert.SerializeObject(qEvent, _config.serializationSettings));
         }
 
         public async Task<uint[]> GetConnectedPlayers(string[] playerIds, uint threshold = 0)
@@ -75,5 +93,20 @@ namespace QuantumGameServer
 
             return Array.ConvertAll(resp, redisValue => redisValue.TryParse(out long test) ? (uint)test : uint.MaxValue);
         }
+    }
+    
+    public class QuantumEvent
+    {
+        public string gameInstanceId { get; set; }
+        public string playerId { get; set; }
+        public string type { get; set; }
+        public uint id { get; set; }
+        public GenericMessage message { get; set; }
+    }
+     
+    public class GenericMessage
+    {
+        public string type { get; set; }
+        public object data { get; set; }
     }
 }

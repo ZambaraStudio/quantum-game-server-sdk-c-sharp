@@ -1,4 +1,4 @@
-﻿namespace QuantumGameServer
+﻿namespace Quantum
 {
     public class PlayerData<T> where T : class
     {

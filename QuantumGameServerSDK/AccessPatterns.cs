@@ -1,4 +1,4 @@
-﻿namespace QuantumGameServer
+﻿namespace Quantum
 {
     public static class AccessPatterns
     { 

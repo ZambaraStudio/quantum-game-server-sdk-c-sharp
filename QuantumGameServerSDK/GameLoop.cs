@@ -3,15 +3,15 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using StackExchange.Redis;
 
-namespace QuantumGameServer
+namespace Quantum
 {
     
     public struct GameLoopConfig<S, P> where S : class where P : class
     {
         public int tickRate;
         public IDatabase redisDatabase;
-        public Func<GameInstance<S, P>, QuantumGameServer<S, P>, S> tick;
-        public QuantumGameServer<S, P> quantumGameServer;
+        public Func<GameInstance<S, P>, GameServer<S, P>, S> tick;
+        public GameServer<S, P> quantumGameServer;
         public JsonSerializerSettings serializationSettings;
     }
     
@@ -20,8 +20,8 @@ namespace QuantumGameServer
         private bool _runing;
         private int _tickRate;
         private IDatabase _redisDatabase;
-        private Func<GameInstance<S, P>, QuantumGameServer<S, P>, S> _tick;
-        private QuantumGameServer<S, P> _quantumGameServer;
+        private Func<GameInstance<S, P>, GameServer<S, P>, S> _tick;
+        private GameServer<S, P> _quantumGameServer;
         private const string _luaScript = @"
         local oldestEntry = redis.call('ZRANGE', KEYS[1], 0, 0)
             if #oldestEntry > 0 then
